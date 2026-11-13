@@ -11,6 +11,9 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.KeyEvent;
@@ -113,6 +116,77 @@ public class GameShell extends Applet implements Runnable, MouseListener, MouseM
 	@ObfuscatedName("JWWAIQPI.n")
 	public Graphics graphics;
 
+	// rpi0001 patch: scalable window / full screen.
+	// The game draws into a fixed-size back buffer; a presenter thread scales it to the window.
+	public BufferedImage backBuffer;
+	public Graphics backGraphics;
+	public volatile double viewScale = 1.0;
+	public volatile int viewX = 0;
+	public volatile int viewY = 0;
+
+	public synchronized Graphics screenGraphics() {
+		if (this.backBuffer == null) {
+			this.backBuffer = new BufferedImage(this.canvasWidth, this.canvasHeight, BufferedImage.TYPE_INT_RGB);
+			this.backGraphics = this.backBuffer.getGraphics();
+			Thread presenter = new Thread(() -> {
+				while (this.state >= 0) {
+					try {
+						Graphics g = this.getBaseComponent().getGraphics();
+						if (g != null) {
+							this.present(g);
+							g.dispose();
+						}
+						java.awt.Toolkit.getDefaultToolkit().sync();
+						Thread.sleep(16L);
+					} catch (Exception ignore) {
+					}
+				}
+			}, "presenter");
+			presenter.setDaemon(true);
+			presenter.start();
+		}
+		return this.backGraphics;
+	}
+
+	public void present(Graphics g) {
+		if (this.backBuffer == null) {
+			return;
+		}
+		int w = this.getBaseComponent().getWidth();
+		int h = this.getBaseComponent().getHeight();
+		if (w <= 0 || h <= 0) {
+			return;
+		}
+		double scale = Math.min((double) w / this.canvasWidth, (double) h / this.canvasHeight);
+		int sw = (int) Math.round(this.canvasWidth * scale);
+		int sh = (int) Math.round(this.canvasHeight * scale);
+		int ox = (w - sw) / 2;
+		int oy = (h - sh) / 2;
+		this.viewScale = scale;
+		this.viewX = ox;
+		this.viewY = oy;
+		Graphics2D g2 = (Graphics2D) g;
+		g2.setColor(Color.black);
+		if (oy > 0) {
+			g2.fillRect(0, 0, w, oy);
+			g2.fillRect(0, oy + sh, w, h - oy - sh);
+		}
+		if (ox > 0) {
+			g2.fillRect(0, 0, ox, h);
+			g2.fillRect(ox + sw, 0, w - ox - sw, h);
+		}
+		g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, Math.abs(scale - Math.rint(scale)) < 0.001 ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		g2.drawImage(this.backBuffer, ox, oy, sw, sh, null);
+	}
+
+	public int toGameX(int x) {
+		return (int) ((x - this.viewX) / this.viewScale);
+	}
+
+	public int toGameY(int y) {
+		return (int) ((y - this.viewY) / this.viewScale);
+	}
+
 	@ObfuscatedName("JWWAIQPI.a(III)V")
 	public void initApplication(int height, int width) {
 		this.setPreferredSize(new Dimension(width, height));
@@ -120,7 +194,7 @@ public class GameShell extends Applet implements Runnable, MouseListener, MouseM
 		this.canvasWidth = width;
 		this.canvasHeight = height;
 		this.frame = new ViewBox(this.canvasHeight, this, this.canvasWidth);
-		this.graphics = this.getBaseComponent().getGraphics();
+		this.graphics = this.screenGraphics();
 		this.drawArea = new PixMap(this.canvasHeight, this.getBaseComponent(), this.canvasWidth);
 
 		this.startThread(this, 1);
@@ -132,7 +206,7 @@ public class GameShell extends Applet implements Runnable, MouseListener, MouseM
 
 		this.canvasWidth = width;
 		this.canvasHeight = height;
-		this.graphics = this.getBaseComponent().getGraphics();
+		this.graphics = this.screenGraphics();
 		this.drawArea = new PixMap(this.canvasHeight, this.getBaseComponent(), this.canvasWidth);
 
 		this.startThread(this, 1);
@@ -313,8 +387,9 @@ public class GameShell extends Applet implements Runnable, MouseListener, MouseM
 
 	public void update(Graphics g) {
 		if (this.graphics == null) {
-			this.graphics = g;
+			this.graphics = this.screenGraphics();
 		}
+		this.present(g);
 
 		this.redrawScreen = true;
 		this.refresh();
@@ -322,16 +397,17 @@ public class GameShell extends Applet implements Runnable, MouseListener, MouseM
 
 	public void paint(Graphics g) {
 		if (this.graphics == null) {
-			this.graphics = g;
+			this.graphics = this.screenGraphics();
 		}
+		this.present(g);
 
 		this.redrawScreen = true;
 		this.refresh();
 	}
 
 	public void mousePressed(MouseEvent e) {
-		int x = e.getX();
-		int y = e.getY();
+		int x = this.toGameX(e.getX());
+		int y = this.toGameY(e.getY());
 
 		this.idleCycles = 0;
 		this.nextMouseClickX = x;
@@ -376,8 +452,8 @@ public class GameShell extends Applet implements Runnable, MouseListener, MouseM
 	}
 
 	public void mouseDragged(MouseEvent e) {
-		int x = e.getX();
-		int y = e.getY();
+		int x = this.toGameX(e.getX());
+		int y = this.toGameY(e.getY());
 
 		this.idleCycles = 0;
 		this.mouseX = x;
@@ -385,8 +461,8 @@ public class GameShell extends Applet implements Runnable, MouseListener, MouseM
 	}
 
 	public void mouseMoved(MouseEvent e) {
-		int x = e.getX();
-		int y = e.getY();
+		int x = this.toGameX(e.getX());
+		int y = this.toGameY(e.getY());
 
 		this.idleCycles = 0;
 		this.mouseX = x;
@@ -561,7 +637,7 @@ public class GameShell extends Applet implements Runnable, MouseListener, MouseM
 	@ObfuscatedName("JWWAIQPI.a(IZLjava/lang/String;)V")
 	public void drawProgress(int percent, String message) {
 		while (this.graphics == null) {
-			this.graphics = this.getBaseComponent().getGraphics();
+			this.graphics = this.screenGraphics();
 
 			try {
 				this.getBaseComponent().repaint();

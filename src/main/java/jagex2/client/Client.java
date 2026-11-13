@@ -1534,7 +1534,8 @@ public class Client extends GameShell {
 		}
 		try {
 			if (super.frame != null) {
-				return new URL("http://127.0.0.1:" + (portOffset + 80));
+				// rpi0001 patch: server host/web port configurable via -Dlostcity.host / -Dlostcity.webport
+				return new URL("http://" + System.getProperty("lostcity.host", "127.0.0.1") + ":" + Integer.getInteger("lostcity.webport", portOffset + 80));
 			}
 		} catch (Exception var1) {
 		}
@@ -2358,7 +2359,7 @@ public class Client extends GameShell {
 
 	@ObfuscatedName("client.G(I)V")
 	public void drawError() {
-		Graphics var2 = this.getBaseComponent().getGraphics();
+		Graphics var2 = this.screenGraphics();
 		var2.setColor(Color.black);
 		var2.fillRect(0, 0, 765, 503);
 		this.setFramerate(1);

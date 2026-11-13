@@ -183,7 +183,7 @@ public class signlink implements Runnable {
 	}
 
 	public static String findcachedir() {
-		String[] var0 = new String[] { "c:/windows/", "c:/winnt/", "d:/windows/", "d:/winnt/", "e:/windows/", "e:/winnt/", "f:/windows/", "f:/winnt/", "c:/", "~/", "/tmp/", "", "c:/rscache", "/rscache" };
+		String[] var0 = new String[] { System.getProperty("lostcity.cachedir", System.getProperty("user.home") + "/.lostcity377/"), "c:/windows/", "c:/winnt/", "d:/windows/", "d:/winnt/", "e:/windows/", "e:/winnt/", "f:/windows/", "f:/winnt/", "c:/", "~/", "/tmp/", "", "c:/rscache", "/rscache" };
 		if (storeid < 32 || storeid > 34) {
 			storeid = 32;
 		}
