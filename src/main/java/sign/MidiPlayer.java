@@ -21,6 +21,16 @@ public final class MidiPlayer implements Receiver {
 		setTick(-1L);
 	}
 
+	public boolean setSoundfont(java.io.File soundfont) {
+		try {
+			Soundbank bank = MidiSystem.getSoundbank(soundfont);
+			synth.unloadAllInstruments(synth.getDefaultSoundbank());
+			return synth.loadAllInstruments(bank);
+		} catch (Exception ignore) {
+			return false;
+		}
+	}
+
 	public void setSoundfont(byte[] soundfont) {
 		try {
 			synth.unloadAllInstruments(synth.getDefaultSoundbank());

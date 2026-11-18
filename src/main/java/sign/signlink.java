@@ -112,7 +112,18 @@ public class signlink implements Runnable {
 		uid = getuid(var1);
 		try {
 			midiPlayer = new MidiPlayer();
+			File soundfont = new File(System.getProperty("lostcity.soundfont",
+				System.getProperty("user.home") + "/.lostcity377/soundfont.sf2"));
+			if (soundfont.isFile()) {
+				System.out.println(midiPlayer.setSoundfont(soundfont)
+					? "Loaded soundfont " + soundfont : "Could not load soundfont " + soundfont);
+			}
 		} catch (Exception ex) {
+		}
+		try {
+			waveMixer = new WaveMixer();
+		} catch (Exception ex) {
+			System.out.println("Sound effect mixer unavailable, using file playback: " + ex);
 		}
 		try {
 			File var2 = new File(var1 + "main_file_cache.dat");
@@ -265,9 +276,20 @@ public class signlink implements Runnable {
 		threadreq = arg0;
 	}
 
+	private static WaveMixer waveMixer;
+	private static byte[] lastWave;
+
 	public static synchronized boolean wavesave(byte[] arg0, int arg1) {
 		if (arg1 > 2000000) {
 			return false;
+		} else if (waveMixer != null) {
+			// the client reuses its packet buffer, so keep a copy for wavereplay()
+			byte[] copy = new byte[arg1];
+			System.arraycopy(arg0, 0, copy, 0, arg1);
+			lastWave = copy;
+			waveMixer.setVolume(wavevol);
+			waveMixer.play(copy, copy.length);
+			return true;
 		} else if (savereq == null) {
 			wavepos = (wavepos + 1) % 5;
 			savelen = arg1;
@@ -281,7 +303,13 @@ public class signlink implements Runnable {
 	}
 
 	public static synchronized boolean wavereplay() {
-		if (savereq == null) {
+		if (waveMixer != null) {
+			if (lastWave != null) {
+				waveMixer.setVolume(wavevol);
+				waveMixer.play(lastWave, lastWave.length);
+			}
+			return true;
+		} else if (savereq == null) {
 			savebuf = null;
 			waveplay = true;
 			savereq = "sound" + wavepos + ".wav";
